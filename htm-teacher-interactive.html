@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Interactive HTM Model Visualization</title>
+    <!-- Link to Chart.js CDN for chart visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* styles.css */
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .control-group {
+            background: #fff;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            width: 250px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+
+        .buttons {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .buttons button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #007BFF;
+            color: white;
+            transition: background-color 0.3s;
+        }
+
+        .buttons button:hover {
+            background-color: #0056b3;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-gap: 30px;
+        }
+
+        .chart-container {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        #sdrCanvas, #activeColumnsCanvas {
+            width: 100%;
+            height: 300px;
+            background-color: #000;
+        }
+
+        @media (max-width: 800px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .control-group {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Interactive Hierarchical Temporal Memory (HTM) Model</h1>
+
+    <!-- Control Sliders -->
+    <div class="controls">
+        <div class="control-group">
+            <label for="frequencySlider">Input Frequency: <span id="frequencyValue">20</span></label>
+            <input type="range" id="frequencySlider" min="5" max="50" value="20">
+        </div>
+
+        <div class="control-group">
+            <label for="activeBitsSlider">Number of Active Bits: <span id="activeBitsValue">10</span></label>
+            <input type="range" id="activeBitsSlider" min="5" max="20" value="10">
+        </div>
+
+        <div class="control-group">
+            <label for="spActivePercentageSlider">SP Active Percentage: <span id="spActivePercentageValue">20%</span></label>
+            <input type="range" id="spActivePercentageSlider" min="10" max="50" value="20">
+        </div>
+
+        <div class="control-group">
+            <label for="animationSpeedSlider">Animation Speed (ms): <span id="animationSpeedValue">100</span></label>
+            <input type="range" id="animationSpeedSlider" min="50" max="500" step="50" value="100">
+        </div>
+    </div>
+
+    <!-- Control Buttons -->
+    <div class="buttons">
+        <button id="startButton">Start</button>
+        <button id="pauseButton">Pause</button>
+        <button id="resetButton">Reset</button>
+    </div>
+
+    <!-- Visualization Containers -->
+    <div class="container">
+        <!-- Input Value Over Time -->
+        <div class="chart-container">
+            <canvas id="inputChart"></canvas>
+        </div>
+
+        <!-- Prediction Accuracy Over Time -->
+        <div class="chart-container">
+            <canvas id="accuracyChart"></canvas>
+        </div>
+
+        <!-- Encoded Input SDR -->
+        <div class="chart-container">
+            <canvas id="sdrCanvas"></canvas>
+        </div>
+
+        <!-- Active Columns Over Time -->
+        <div class="chart-container">
+            <canvas id="activeColumnsCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // script.js
+
+        // Step 1: Basic Setup and Initialization
+
+        let MIN_INPUT_VALUE = 0.0;
+        let MAX_INPUT_VALUE = 1.0;
+
+        let ENCODER_OUTPUT_SIZE = 64; // 8x8 grid for visualization
+        let NUM_ACTIVE_BITS = 10;
+        let ENCODER_RESOLUTION = 0.01;
+
+        let NUM_SP_COLUMNS = 32;
+        let SP_ACTIVE_PERCENTAGE = 0.2; // 20%
+        let TM_CELLS_PER_COLUMN = 4;
+
+        let NUM_ITERATIONS = 100;
+
+        let input_frequency = 20; // Default value, adjustable via slider
+        let animation_speed = 100; // in milliseconds
+
+        // Generate a simple data sequence (sine wave)
+        function generateInputSequence(frequency) {
+            return Array.from({length: NUM_ITERATIONS}, (_, t) => 0.5 + 0.5 * Math.sin(2 * Math.PI * t / frequency));
+        }
+
+        let input_sequence = generateInputSequence(input_frequency);
+
+        const split_ratio = 0.7;
+        let split_index = Math.floor(NUM_ITERATIONS * split_ratio);
+        let train_sequence = input_sequence.slice(0, split_index);
+        let test_sequence = input_sequence.slice(split_index);
+
+        // Step 2: Random Distributed Scalar Encoder (RDSE)
+
+        class RandomDistributedScalarEncoder {
+            constructor(min_value, max_value, output_size, num_active_bits, resolution, seed = null) {
+                this.min_value = min_value;
+                this.max_value = max_value;
+                this.output_size = output_size;
+                this.num_active_bits = num_active_bits;
+                this.resolution = resolution;
+
+                if (seed !== null) {
+                    // Simple seedable random generator
+                    this.random = this.seededRandom(seed);
+                } else {
+                    this.random = Math.random;
+                }
+
+                this.prototypes = Array.from({length: this.output_size}, () => this.random() * (this.max_value - this.min_value) + this.min_value);
+            }
+
+            seededRandom(seed) {
+                let x = Math.sin(seed++) * 10000;
+                return () => {
+                    x = Math.sin(seed++) * 10000;
+                    return x - Math.floor(x);
+                };
+            }
+
+            encode(value) {
+                const distances = this.prototypes.map((proto, idx) => ({index: idx, distance: Math.abs(value - proto)}));
+                distances.sort((a, b) => a.distance - b.distance);
+                const active_indices = distances.slice(0, this.num_active_bits).map(d => d.index);
+                const sdr = Array(this.output_size).fill(0);
+                active_indices.forEach(idx => sdr[idx] = 1);
+                return sdr;
+            }
+        }
+
+        // Step 3: Spatial Pooler (SP) Implementation
+
+        class SpatialPooler {
+            constructor(input_size, num_columns, active_percentage) {
+                this.input_size = input_size;
+                this.num_columns = num_columns;
+                this.active_percentage = active_percentage;
+
+                this.potential_synapses = {};
+                this.permanences = {};
+                this.connected_synapses = {};
+
+                for (let col = 0; col < this.num_columns; col++) {
+                    const potential = this.getRandomSample(this.input_size, Math.floor(0.5 * this.input_size));
+                    this.potential_synapses[col] = potential;
+                    this.permanences[col] = {};
+                    potential.forEach(i => {
+                        this.permanences[col][i] = Math.random();
+                    });
+                    this.connected_synapses[col] = potential.filter(i => this.permanences[col][i] >= 0.2);
+                }
+            }
+
+            getRandomSample(total, count) {
+                const arr = Array.from({length: total}, (_, i) => i);
+                for (let i = arr.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [arr[i], arr[j]] = [arr[j], arr[i]];
+                }
+                return arr.slice(0, count);
+            }
+
+            compute_overlap(input_vector) {
+                const overlaps = {};
+                for (let col = 0; col < this.num_columns; col++) {
+                    const connected = this.connected_synapses[col];
+                    overlaps[col] = connected.reduce((sum, idx) => sum + input_vector[idx], 0);
+                }
+                return overlaps;
+            }
+
+            inhibit_columns(overlaps) {
+                const num_active = Math.max(1, Math.floor(this.num_columns * this.active_percentage));
+                const sorted = Object.entries(overlaps).sort((a, b) => b[1] - a[1]);
+                const active_columns = [];
+                for (let i = 0; i < sorted.length && active_columns.length < num_active; i++) {
+                    if (sorted[i][1] > 0) {
+                        active_columns.push(parseInt(sorted[i][0]));
+                    }
+                }
+                return active_columns;
+            }
+
+            update_permanences(active_columns, input_vector) {
+                active_columns.forEach(col => {
+                    this.potential_synapses[col].forEach(i => {
+                        if (input_vector[i] === 1) {
+                            this.permanences[col][i] = Math.min(1.0, this.permanences[col][i] + 0.05);
+                        } else {
+                            this.permanences[col][i] = Math.max(0.0, this.permanences[col][i] - 0.02);
+                        }
+                        if (this.permanences[col][i] >= 0.2) {
+                            if (!this.connected_synapses[col].includes(i)) {
+                                this.connected_synapses[col].push(i);
+                            }
+                        } else {
+                            const idx = this.connected_synapses[col].indexOf(i);
+                            if (idx > -1) {
+                                this.connected_synapses[col].splice(idx, 1);
+                            }
+                        }
+                    });
+                });
+            }
+
+            setActivePercentage(percentage) {
+                this.active_percentage = percentage;
+            }
+        }
+
+        // Step 4: Temporal Memory (TM) Initialization
+
+        class TemporalMemory {
+            constructor(num_columns, cells_per_column) {
+                this.num_columns = num_columns;
+                this.cells_per_column = cells_per_column;
+
+                this.active_cells = new Set();
+                this.predictive_cells = new Set();
+                this.previous_active_cells = new Set();
+
+                this.segment_connections = {}; // Key: cell index, Value: Set of connected cell indices
+            }
+
+            column_cells(col_idx) {
+                const base = col_idx * this.cells_per_column;
+                return Array.from({length: this.cells_per_column}, (_, i) => base + i);
+            }
+
+            activate_cells(active_columns) {
+                const new_active = new Set();
+                active_columns.forEach(col => {
+                    const cells = this.column_cells(col);
+                    const predictive_in_col = cells.filter(cell => this.predictive_cells.has(cell));
+                    if (predictive_in_col.length > 0) {
+                        predictive_in_col.forEach(cell => new_active.add(cell));
+                    } else {
+                        cells.forEach(cell => new_active.add(cell)); // Burst
+                    }
+                });
+                this.active_cells = new_active;
+            }
+
+            predict_cells() {
+                const new_predictive = new Set();
+                this.active_cells.forEach(cell => {
+                    if (this.segment_connections[cell]) {
+                        this.segment_connections[cell].forEach(pred_cell => new_predictive.add(pred_cell));
+                    }
+                });
+                this.predictive_cells = new_predictive;
+            }
+
+            learn_sequences() {
+                this.active_cells.forEach(cell => {
+                    this.previous_active_cells.forEach(prev_cell => {
+                        if (!this.segment_connections[prev_cell]) {
+                            this.segment_connections[prev_cell] = new Set();
+                        }
+                        this.segment_connections[prev_cell].add(cell);
+                    });
+                });
+            }
+
+            update_state() {
+                this.previous_active_cells = new Set(this.active_cells);
+                this.predict_cells();
+            }
+        }
+
+        // Step 5: Feeding Input Data and Processing with Animation
+
+        // Initialize the components
+        let encoder = new RandomDistributedScalarEncoder(
+            MIN_INPUT_VALUE,
+            MAX_INPUT_VALUE,
+            ENCODER_OUTPUT_SIZE,
+            NUM_ACTIVE_BITS,
+            ENCODER_RESOLUTION
+            // Seed can be added if reproducibility is needed
+        );
+
+        let spatial_pooler = new SpatialPooler(
+            ENCODER_OUTPUT_SIZE,
+            NUM_SP_COLUMNS,
+            SP_ACTIVE_PERCENTAGE
+        );
+
+        let temporal_memory = new TemporalMemory(
+            NUM_SP_COLUMNS,
+            TM_CELLS_PER_COLUMN
+        );
+
+        // Initialize variables to track prediction accuracy and history
+        let correct_predictions = [];
+        let time_steps = [];
+        let prediction_results = [];
+        let active_columns_history = [];
+        let input_values = [];
+        let encoded_inputs = [];
+        let predicted_columns_history = [];
+        let expected_active_columns_history = [];
+        let accuracy_over_time = [];
+
+        // Setup Charts using Chart.js
+
+        // Input Value Over Time Chart
+        const inputCtx = document.getElementById('inputChart').getContext('2d');
+        const inputChart = new Chart(inputCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Input Value',
+                    data: [],
+                    borderColor: 'blue',
+                    fill: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                animation: false,
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Time Step' }
+                    },
+                    y: {
+                        min: MIN_INPUT_VALUE - 0.1,
+                        max: MAX_INPUT_VALUE + 0.1,
+                        title: { display: true, text: 'Input Value' }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Input Value Over Time'
+                    }
+                }
+            }
+        });
+
+        // Prediction Accuracy Over Time Chart
+        const accuracyCtx = document.getElementById('accuracyChart').getContext('2d');
+        const accuracyChart = new Chart(accuracyCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Accuracy',
+                    data: [],
+                    borderColor: 'green',
+                    fill: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                animation: false,
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Time Step' }
+                    },
+                    y: {
+                        min: 0,
+                        max: 1,
+                        title: { display: true, text: 'Accuracy' }
+                    }
+                },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Prediction Accuracy Over Time'
+                    }
+                }
+            }
+        });
+
+        // Encoded Input SDR Visualization
+        const sdrCanvas = document.getElementById('sdrCanvas');
+        const sdrCtx = sdrCanvas.getContext('2d');
+        const SDR_SIZE = Math.sqrt(ENCODER_OUTPUT_SIZE);
+        const CELL_SIZE = 20;
+
+        // Active Columns Over Time Visualization
+        const activeColumnsCanvas = document.getElementById('activeColumnsCanvas');
+        const activeColumnsCtx = activeColumnsCanvas.getContext('2d');
+        activeColumnsCanvas.width = 400;
+        activeColumnsCanvas.height = 300;
+
+        // Function to draw SDR
+        function drawSDR(sdr) {
+            sdrCtx.clearRect(0, 0, sdrCanvas.width, sdrCanvas.height);
+            sdrCtx.fillStyle = 'white';
+            sdr.forEach((bit, idx) => {
+                const row = Math.floor(idx / SDR_SIZE);
+                const col = idx % SDR_SIZE;
+                if (bit === 1) {
+                    sdrCtx.fillStyle = 'lime';
+                } else {
+                    sdrCtx.fillStyle = 'black';
+                }
+                sdrCtx.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE - 2, CELL_SIZE - 2);
+            });
+        }
+
+        // Function to draw Active Columns
+        function drawActiveColumns(t) {
+            activeColumnsCtx.clearRect(0, 0, activeColumnsCanvas.width, activeColumnsCanvas.height);
+            activeColumnsCtx.fillStyle = 'blue';
+            active_columns_history.forEach(([time, cols]) => {
+                cols.forEach(col => {
+                    activeColumnsCtx.fillRect(time * 4, col * 8, 3, 7); // Scaled for visibility
+                });
+            });
+        }
+
+        // Animation Control Variables
+        let currentIteration = 0;
+        let animationInterval = null;
+        let isPaused = true;
+
+        // Start Animation
+        function startAnimation() {
+            if (isPaused) {
+                isPaused = false;
+                animationInterval = setInterval(animateStep, animation_speed);
+            }
+        }
+
+        // Pause Animation
+        function pauseAnimation() {
+            if (!isPaused) {
+                isPaused = true;
+                clearInterval(animationInterval);
+            }
+        }
+
+        // Reset Animation
+        function resetAnimation() {
+            pauseAnimation();
+            // Reset all variables and states
+            currentIteration = 0;
+            input_sequence = generateInputSequence(input_frequency);
+            split_index = Math.floor(NUM_ITERATIONS * split_ratio);
+            train_sequence = input_sequence.slice(0, split_index);
+            test_sequence = input_sequence.slice(split_index);
+
+            encoder = new RandomDistributedScalarEncoder(
+                MIN_INPUT_VALUE,
+                MAX_INPUT_VALUE,
+                ENCODER_OUTPUT_SIZE,
+                NUM_ACTIVE_BITS,
+                ENCODER_RESOLUTION
+            );
+
+            spatial_pooler = new SpatialPooler(
+                ENCODER_OUTPUT_SIZE,
+                NUM_SP_COLUMNS,
+                SP_ACTIVE_PERCENTAGE
+            );
+
+            temporal_memory = new TemporalMemory(
+                NUM_SP_COLUMNS,
+                TM_CELLS_PER_COLUMN
+            );
+
+            correct_predictions.length = 0;
+            time_steps.length = 0;
+            prediction_results.length = 0;
+            active_columns_history.length = 0;
+            input_values.length = 0;
+            encoded_inputs.length = 0;
+            predicted_columns_history.length = 0;
+            expected_active_columns_history.length = 0;
+            accuracy_over_time.length = 0;
+
+            // Reset Charts
+            inputChart.data.labels = [];
+            inputChart.data.datasets[0].data = [];
+            inputChart.update();
+
+            accuracyChart.data.labels = [];
+            accuracyChart.data.datasets[0].data = [];
+            accuracyChart.update();
+
+            // Clear SDR and Active Columns
+            drawSDR(Array(ENCODER_OUTPUT_SIZE).fill(0));
+            drawActiveColumns(NUM_ITERATIONS);
+
+            isPaused = true;
+        }
+
+        // Main Animation Loop
+        function animateStep() {
+            if (currentIteration >= NUM_ITERATIONS) {
+                pauseAnimation();
+                return;
+            }
+
+            // Determine phase
+            const phase = currentIteration < train_sequence.length ? 'Training' : 'Testing';
+            const input_value = currentIteration < train_sequence.length ? train_sequence[currentIteration] : test_sequence[currentIteration - train_sequence.length];
+
+            // Encode the input value
+            const encoded_input = encoder.encode(input_value);
+            encoded_inputs.push(encoded_input);
+            input_values.push(input_value);
+
+            // Update Input Chart
+            inputChart.data.labels.push(currentIteration);
+            inputChart.data.datasets[0].data.push(input_value);
+            inputChart.update();
+
+            // Spatial Pooler operations
+            const overlaps = spatial_pooler.compute_overlap(encoded_input);
+            const active_columns = spatial_pooler.inhibit_columns(overlaps);
+            active_columns_history.push([currentIteration, active_columns]);
+
+            if (phase === 'Training') {
+                spatial_pooler.update_permanences(active_columns, encoded_input);
+            }
+
+            // Temporal Memory operations
+            temporal_memory.activate_cells(active_columns);
+            if (phase === 'Training') {
+                temporal_memory.learn_sequences();
+            }
+            temporal_memory.update_state();
+
+            // Draw SDR
+            drawSDR(encoded_input);
+
+            // Prediction
+            if (currentIteration < NUM_ITERATIONS - 1) {
+                const next_input_value = currentIteration + 1 < train_sequence.length ? train_sequence[currentIteration + 1] : (currentIteration + 1 - train_sequence.length < test_sequence.length ? test_sequence[currentIteration + 1 - train_sequence.length] : test_sequence[0]);
+                const next_encoded_input = encoder.encode(next_input_value);
+                const next_overlaps = spatial_pooler.compute_overlap(next_encoded_input);
+                const expected_active_columns = spatial_pooler.inhibit_columns(next_overlaps);
+                expected_active_columns_history.push([currentIteration + 1, expected_active_columns]);
+
+                // Predicted columns from Temporal Memory
+                const predicted_columns = new Set();
+                temporal_memory.predictive_cells.forEach(cell => {
+                    const col = Math.floor(cell / TM_CELLS_PER_COLUMN);
+                    predicted_columns.add(col);
+                });
+                predicted_columns_history.push([currentIteration + 1, predicted_columns]);
+
+                // Check prediction
+                const isCorrect = expected_active_columns.some(col => predicted_columns.has(col));
+                correct_predictions.push(isCorrect ? 1 : 0);
+
+                // Update Accuracy
+                const accuracy = correct_predictions.reduce((a, b) => a + b, 0) / correct_predictions.length;
+                accuracy_over_time.push(accuracy);
+
+                // Update Accuracy Chart
+                accuracyChart.data.labels.push(currentIteration);
+                accuracyChart.data.datasets[0].data.push(accuracy);
+                accuracyChart.update();
+            } else {
+                accuracy_over_time.push(accuracy_over_time.length > 0 ? accuracy_over_time[accuracy_over_time.length - 1] : 0);
+                accuracyChart.data.labels.push(currentIteration);
+                accuracyChart.data.datasets[0].data.push(accuracy_over_time[accuracy_over_time.length - 1] || 0);
+                accuracyChart.update();
+            }
+
+            // Increment iteration
+            currentIteration++;
+
+            // Draw Active Columns periodically for performance
+            if (currentIteration % 5 === 0 || currentIteration === NUM_ITERATIONS) { // Update every 5 steps for performance
+                drawActiveColumns(currentIteration);
+            }
+        }
+
+        // Event Listeners for Sliders and Buttons
+
+        // Frequency Slider
+        const frequencySlider = document.getElementById('frequencySlider');
+        const frequencyValue = document.getElementById('frequencyValue');
+        frequencySlider.addEventListener('input', (e) => {
+            frequencyValue.textContent = e.target.value;
+            input_frequency = parseInt(e.target.value);
+            input_sequence = generateInputSequence(input_frequency);
+            split_index = Math.floor(NUM_ITERATIONS * split_ratio);
+            train_sequence = input_sequence.slice(0, split_index);
+            test_sequence = input_sequence.slice(split_index);
+            resetAnimation();
+        });
+
+        // Number of Active Bits Slider
+        const activeBitsSlider = document.getElementById('activeBitsSlider');
+        const activeBitsValue = document.getElementById('activeBitsValue');
+        activeBitsSlider.addEventListener('input', (e) => {
+            activeBitsValue.textContent = e.target.value;
+            NUM_ACTIVE_BITS = parseInt(e.target.value);
+            encoder = new RandomDistributedScalarEncoder(
+                MIN_INPUT_VALUE,
+                MAX_INPUT_VALUE,
+                ENCODER_OUTPUT_SIZE,
+                NUM_ACTIVE_BITS,
+                ENCODER_RESOLUTION
+            );
+            resetAnimation();
+        });
+
+        // SP Active Percentage Slider
+        const spActivePercentageSlider = document.getElementById('spActivePercentageSlider');
+        const spActivePercentageValue = document.getElementById('spActivePercentageValue');
+        spActivePercentageSlider.addEventListener('input', (e) => {
+            const percentage = parseInt(e.target.value) / 100;
+            spActivePercentageValue.textContent = `${e.target.value}%`;
+            SP_ACTIVE_PERCENTAGE = percentage;
+            spatial_pooler.setActivePercentage(SP_ACTIVE_PERCENTAGE);
+            resetAnimation();
+        });
+
+        // Animation Speed Slider
+        const animationSpeedSlider = document.getElementById('animationSpeedSlider');
+        const animationSpeedValue = document.getElementById('animationSpeedValue');
+        animationSpeedSlider.addEventListener('input', (e) => {
+            animationSpeedValue.textContent = e.target.value;
+            animation_speed = parseInt(e.target.value);
+            if (!isPaused) {
+                clearInterval(animationInterval);
+                animationInterval = setInterval(animateStep, animation_speed);
+            }
+        });
+
+        // Start Button
+        const startButton = document.getElementById('startButton');
+        startButton.addEventListener('click', startAnimation);
+
+        // Pause Button
+        const pauseButton = document.getElementById('pauseButton');
+        pauseButton.addEventListener('click', pauseAnimation);
+
+        // Reset Button
+        const resetButton = document.getElementById('resetButton');
+        resetButton.addEventListener('click', resetAnimation);
+
+        // Initialize SDR and Active Columns
+        drawSDR(Array(ENCODER_OUTPUT_SIZE).fill(0));
+        drawActiveColumns(NUM_ITERATIONS);
+
+        // Automatically start the animation
+        startAnimation();
+    </script>
+</body>
+</html>
