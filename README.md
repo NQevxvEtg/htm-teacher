@@ -82,7 +82,7 @@ The animation is divided into training and testing phases, mimicking typical mac
 
 ## Dependencies
 
-- **Python 3.6 or higher**
+- **Python 3.11 or higher**
 - **NumPy**
 - **Matplotlib**
 
