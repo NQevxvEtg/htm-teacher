@@ -65,6 +65,7 @@ The project includes:
 To run the HTM simulation and view the animation:
 
 Use Jupyter Notebook to generate video. 
+
 Use HTML for interactive mode.
 
 **Note:** Ensure that you have `ffmpeg` or `imagemagick` installed if you want to save the animation as a video or GIF file.
@@ -88,7 +89,8 @@ The animation is divided into training and testing phases, mimicking typical mac
 
 ## Project Structure
 
-- **htm_teacher.ipynb**: The main Jupyter Notebook containing the HTM implementation and animation code.
+- **htm-teacher.ipynb**: The main Jupyter Notebook containing the HTM implementation and animation code.
+- **htm-teacher-interactive.html**: Interactive app
 - **README.md**: Project description and usage instructions.
 - **LICENSE**: The project's license.
 
