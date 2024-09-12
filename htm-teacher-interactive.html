@@ -77,6 +77,14 @@
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        .chart-title {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 18px;
+            font-weight: bold;
         }
 
         #sdrCanvas, #activeColumnsCanvas {
@@ -134,21 +142,25 @@
     <div class="container">
         <!-- Input Value Over Time -->
         <div class="chart-container">
+            <div class="chart-title">Input Value Over Time</div>
             <canvas id="inputChart"></canvas>
         </div>
 
         <!-- Prediction Accuracy Over Time -->
         <div class="chart-container">
+            <div class="chart-title">Prediction Accuracy Over Time</div>
             <canvas id="accuracyChart"></canvas>
         </div>
 
         <!-- Encoded Input SDR -->
         <div class="chart-container">
+            <div class="chart-title">Encoded Input SDR</div>
             <canvas id="sdrCanvas"></canvas>
         </div>
 
         <!-- Active Columns Over Time -->
         <div class="chart-container">
+            <div class="chart-title">Active Columns Over Time</div>
             <canvas id="activeColumnsCanvas"></canvas>
         </div>
     </div>
