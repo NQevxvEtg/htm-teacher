@@ -41,7 +41,7 @@ The project includes:
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/yourusername/htm-teacher.git
+   git clone https://github.com/NQevxvEtg/htm-teacher.git
    cd htm-teacher
    ```
 
@@ -55,8 +55,7 @@ The project includes:
 3. **Install Dependencies**
 
    ```
-   numpy
-   matplotlib
+   pip install numpy matplotlib
    ```
 
 ## Usage
@@ -87,16 +86,9 @@ The animation is divided into training and testing phases, mimicking typical mac
 - **NumPy**
 - **Matplotlib**
 
-To install the dependencies, run:
-
-```bash
-pip install numpy matplotlib
-```
-
 ## Project Structure
 
 - **htm_teacher.ipynb**: The main Jupyter Notebook containing the HTM implementation and animation code.
-- **requirements.txt**: A list of required Python packages.
 - **README.md**: Project description and usage instructions.
 - **LICENSE**: The project's license.
 
