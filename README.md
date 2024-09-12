@@ -54,12 +54,6 @@ The project includes:
 
 3. **Install Dependencies**
 
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-   The `requirements.txt` file should contain:
-
    ```
    numpy
    matplotlib
