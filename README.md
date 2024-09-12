@@ -71,9 +71,8 @@ The project includes:
 
 To run the HTM simulation and view the animation:
 
-```bash
-python htm_teacher.py
-```
+Use Jupyter Notebook to generate video. 
+Use HTML for interactive mode.
 
 **Note:** Ensure that you have `ffmpeg` or `imagemagick` installed if you want to save the animation as a video or GIF file.
 
@@ -102,7 +101,7 @@ pip install numpy matplotlib
 
 ## Project Structure
 
-- **htm_teacher.py**: The main Python script containing the HTM implementation and animation code.
+- **htm_teacher.ipynb**: The main Jupyter Notebook containing the HTM implementation and animation code.
 - **requirements.txt**: A list of required Python packages.
 - **README.md**: Project description and usage instructions.
 - **LICENSE**: The project's license.
